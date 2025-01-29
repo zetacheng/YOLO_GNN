@@ -1,0 +1,10 @@
+# Exclude Python cache
+__pycache__/
+*.pyc
+
+# Exclude data and results
+data/
+Training Results/
+
+# Exclude logs
+*.log
