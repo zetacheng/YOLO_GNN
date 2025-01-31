@@ -1,4 +1,3 @@
-# train.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,7 +83,7 @@ class Train:
             loss.backward()
             self.optimizer.step()
 
-            # Compute accuracy
+            # Compute accuracy (using YOLO output for simplicity)
             _, preds = torch.max(class_logits, 1)
             train_loss += loss.item() * inputs.size(0)
             correct += preds.eq(labels).sum().item()
@@ -120,7 +119,7 @@ class Train:
                 loss_gnn = self.criterion(gnn_output, labels)
                 loss = loss_yolo + loss_gnn
 
-                # Compute accuracy
+                # Compute accuracy (using YOLO output for simplicity)
                 _, preds = torch.max(class_logits, 1)
                 test_loss += loss.item() * inputs.size(0)
                 correct += preds.eq(labels).sum().item()
