@@ -1,13 +1,14 @@
+# train.py
 import torch
 import torch.nn as nn
-import numpy as np
+import torch.nn.functional as F
 from tqdm import tqdm
 import time
 
 class Train:
-    def __init__(self, yolo_model, gnns, train_loader, test_loader, meta, presentation, overfit_detector):
+    def __init__(self, yolo_model, gnn_model, train_loader, test_loader, meta, presentation, overfit_detector):
         self.yolo_model = yolo_model
-        self.gnns = gnns  # Dictionary of GNN models per class
+        self.gnn_model = gnn_model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.meta = meta
@@ -15,38 +16,47 @@ class Train:
         self.overfit_detector = overfit_detector
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.yolo_model.to(self.device)
-        for gnn in self.gnns.values():
-            gnn.to(self.device)
+        self.gnn_model.to(self.device)
 
-        # Optimizers
-        self.yolo_optimizer = torch.optim.Adam(
-            self.yolo_model.parameters(),
+        self.optimizer = torch.optim.Adam(
+            list(self.yolo_model.parameters()) + list(self.gnn_model.parameters()),
             lr=self.meta.enquireMetaValue("learning_rate"),
         )
-        self.gnn_optimizers = {
-            i: torch.optim.Adam(gnn.parameters(), lr=self.meta.enquireMetaValue("learning_rate"))
-            for i, gnn in self.gnns.items()
-        }
 
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.yolo_optimizer, T_max=self.meta.enquireMetaValue("num_epochs")
+            self.optimizer, T_max=self.meta.enquireMetaValue("num_epochs")
         )
 
         self.criterion = nn.CrossEntropyLoss()
 
-    def generate_fully_connected_edges(self, num_nodes, device):
-        """
-        Generate a fully connected edge index for a graph.
-        """
-        row = torch.arange(num_nodes, device=device).repeat_interleave(num_nodes)
-        col = torch.arange(num_nodes, device=device).repeat(num_nodes)
-        edge_index = torch.stack([row, col], dim=0)
-        return edge_index
+    def build_graph(self, component_features, batch_size):
+        num_components = component_features.size(1)
+        total_nodes = batch_size * (num_components + 1)  # +1 for the main object node
+        
+        x = torch.zeros(total_nodes, 64, device=self.device)
+        edge_index = []
+        batch = []
+        
+        for i in range(batch_size):
+            main_node_idx = i * (num_components + 1)
+            x[main_node_idx] = component_features[i].mean(dim=0)  # Main object feature
+            x[main_node_idx+1:main_node_idx+num_components+1] = component_features[i]
+            
+            # Connect main node to all component nodes
+            for j in range(num_components):
+                edge_index.append([main_node_idx, main_node_idx + j + 1])
+                edge_index.append([main_node_idx + j + 1, main_node_idx])
+            
+            batch.extend([i] * (num_components + 1))
+        
+        edge_index = torch.tensor(edge_index, dtype=torch.long, device=self.device).t().contiguous()
+        batch = torch.tensor(batch, dtype=torch.long, device=self.device)
+        
+        return x, edge_index, batch
 
     def train_epoch(self, epoch):
         self.yolo_model.train()
-        for gnn in self.gnns.values():
-            gnn.train()
+        self.gnn_model.train()
 
         train_loss, correct, total = 0, 0, 0
         start_time = time.time()
@@ -54,43 +64,29 @@ class Train:
         for inputs, labels in tqdm(self.train_loader, desc=f"Epoch {epoch + 1} Training", leave=False):
             inputs, labels = inputs.to(self.device), labels.to(self.device)
 
+            self.optimizer.zero_grad()
+
             # YOLO Forward Pass
-            class_logits, _ = self.yolo_model(inputs)  # Unpack YOLO outputs
-            preds = class_logits.argmax(dim=1)
+            class_logits, component_features, _ = self.yolo_model(inputs)
 
-            # YOLO Loss and Backward
+            # Build graph
+            x, edge_index, batch = self.build_graph(component_features, inputs.size(0))
+
+            # GNN Forward Pass
+            gnn_output = self.gnn_model(x, edge_index, batch)
+
+            # Compute loss
             loss_yolo = self.criterion(class_logits, labels)
-            self.yolo_optimizer.zero_grad()
-            loss_yolo.backward()
-            self.yolo_optimizer.step()
+            loss_gnn = self.criterion(gnn_output, labels)
+            loss = loss_yolo + loss_gnn
 
-            # Train GNN for each class
-            for label in labels.unique():
-                gnn = self.gnns[label.item()]
-                optimizer = self.gnn_optimizers[label.item()]
+            # Backward and optimize
+            loss.backward()
+            self.optimizer.step()
 
-                # Filter inputs and labels for the current class
-                label_indices = (labels == label).nonzero(as_tuple=True)[0]
-                label_targets = labels[label_indices]  # Targets for this class
-                num_instances = len(label_targets)  # Number of instances of this class in the batch
-
-                # Generate dynamic graph data based on the number of instances
-                node_features = torch.randn(num_instances, self.meta.enquireMetaValue("gnn_input_dim"), device=self.device)
-                edge_index = self.generate_fully_connected_edges(num_instances, device=self.device)
-
-                # GNN Forward Pass
-                gnn_output = gnn(node_features, edge_index)
-
-                # Compute loss for the current class
-                gnn_loss = self.criterion(gnn_output, label_targets)
-
-                # Backward and optimize GNN
-                optimizer.zero_grad()
-                gnn_loss.backward()
-                optimizer.step()
-
-            # Accumulate metrics
-            train_loss += loss_yolo.item() * inputs.size(0)
+            # Compute accuracy
+            _, preds = torch.max(class_logits, 1)
+            train_loss += loss.item() * inputs.size(0)
             correct += preds.eq(labels).sum().item()
             total += labels.size(0)
 
@@ -102,8 +98,7 @@ class Train:
 
     def test_epoch(self, epoch):
         self.yolo_model.eval()
-        for gnn in self.gnns.values():
-            gnn.eval()
+        self.gnn_model.eval()
 
         test_loss, correct, total = 0, 0, 0
 
@@ -112,11 +107,22 @@ class Train:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
 
                 # YOLO Forward Pass
-                class_logits, _ = self.yolo_model(inputs)
-                loss = self.criterion(class_logits, labels)
+                class_logits, component_features, _ = self.yolo_model(inputs)
 
+                # Build graph
+                x, edge_index, batch = self.build_graph(component_features, inputs.size(0))
+
+                # GNN Forward Pass
+                gnn_output = self.gnn_model(x, edge_index, batch)
+
+                # Compute loss
+                loss_yolo = self.criterion(class_logits, labels)
+                loss_gnn = self.criterion(gnn_output, labels)
+                loss = loss_yolo + loss_gnn
+
+                # Compute accuracy
+                _, preds = torch.max(class_logits, 1)
                 test_loss += loss.item() * inputs.size(0)
-                preds = class_logits.argmax(dim=1)
                 correct += preds.eq(labels).sum().item()
                 total += labels.size(0)
 
@@ -138,14 +144,7 @@ class Train:
 
             # Log results
             self.presentation.display_epoch_results(
-                epoch,
-                train_loss,
-                train_acc,
-                test_loss,
-                test_acc,
-                epoch_time,
-                current_lr,
-                overfit_tag,
+                epoch, train_loss, train_acc, test_loss, test_acc, epoch_time, current_lr, overfit_tag
             )
 
             # Update the learning rate
