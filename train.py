@@ -19,8 +19,20 @@ class Train:
         self.overfit_detector = overfit_detector
         
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.params.learning_rate)
-        self.scheduler = StepLR(self.optimizer, step_size=10, gamma=0.1)
+        self.optimizer = optim.AdamW(self.model.parameters(), 
+                                    lr=self.params.learning_rate, 
+                                    weight_decay=0.01)
+        
+        # OneCycleLR scheduler
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            self.optimizer,
+            max_lr=self.params.learning_rate,
+            epochs=self.params.num_epochs,
+            steps_per_epoch=len(self.train_loader),
+            pct_start=0.3,  # Warm-up period
+            div_factor=25,  # Initial learning rate = max_lr/25
+            final_div_factor=1e4  # Final learning rate = max_lr/10000
+        )
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
