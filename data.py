@@ -26,7 +26,7 @@ class CIFAR10DataLoader:
         test_dataset = datasets.CIFAR10(root='./data', train=False, 
                                       download=True, transform=self.transform_test)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, 
-                                shuffle=True, num_workers=2)
+                                shuffle=True, num_workers=4)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, 
-                               shuffle=False, num_workers=2)
+                               shuffle=False, num_workers=4)
         return train_loader, test_loader
