@@ -1,4 +1,3 @@
-# In overfit_detector.py
 class OverfitDetector:
     def __init__(self, accuracy_threshold=15, loss_threshold=0.25, patience=5):
         self.accuracy_threshold = accuracy_threshold
@@ -26,3 +25,8 @@ class OverfitDetector:
         else:
             return {"is_overfit": False, "reason": ""}
 
+    def tag(self, train_loss, test_loss, train_acc, test_acc):
+        result = self.check(train_loss, test_loss, train_acc, test_acc)
+        if result["is_overfit"]:
+            return f"[overfit:{result['reason']}]"
+        return ""
