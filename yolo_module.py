@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from graph_builder import GraphBuilder
+from meta_manager import Metas  # Ensure parameters are used correctly
 
 class ConvBNSiLU(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
@@ -70,3 +72,22 @@ class YOLO(nn.Module):
         object_logits = self.object_classifier(pooled)
         extracted_features = self.feature_extractor(pooled)
         return object_logits, extracted_features
+
+class YoloModule:
+    def __init__(self):
+        """
+        Initializes YOLO module with GraphBuilder.
+        """
+        self.graph_builder = GraphBuilder()  # Use GraphBuilder
+        self.yolo_input_size = Metas.yolo_input_size  # Ensure Metas are used
+
+    def process_yolo_output(self, yolo_detections, feature_maps):
+        """
+        Uses GraphBuilder to convert YOLO detections into a hierarchical graph.
+
+        :param yolo_detections: List of detected objects
+        :param feature_maps: Feature maps extracted from YOLO
+        :return: PyG Graph Data object
+        """
+        graph = self.graph_builder.build_graph(yolo_detections, feature_maps)
+        return graph

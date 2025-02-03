@@ -67,8 +67,15 @@ class Presentation:
             print(f"Plots saved to {save_path}")
         plt.show()
 
-    def display_progress_bar(self, epoch, num_epochs):
-        tqdm.write(f"Progress: Epoch {epoch + 1}/{num_epochs}")
+    def display_progress_bar(self, phase, epoch, num_epochs, data_loader):
+        """
+        Displays a progress bar for training or testing.
+        :param phase: 'Train' or 'Test'
+        :param epoch: Current epoch
+        :param num_epochs: Total number of epochs
+        :param data_loader: DataLoader for the phase
+        """
+        return tqdm(data_loader, desc=f"{phase} Progress: Epoch {epoch + 1}/{num_epochs}", leave=False)
 
     def start_profiler(self):
         self.profiler = cProfile.Profile()

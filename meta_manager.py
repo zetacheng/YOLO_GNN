@@ -1,4 +1,4 @@
-class Params:
+class Metas:
     def __init__(self):
         self.yolo_input_size = (32, 32)
         self.yolo_num_classes = 10
@@ -15,4 +15,4 @@ class Params:
         if hasattr(self, key):
             return getattr(self, key)
         else:
-            raise KeyError(f"Parameter '{key}' not found in Params.")
+            raise KeyError(f"Parameter '{key}' not found in Metas.")
