@@ -1,4 +1,4 @@
-class Params:
+class Meta:
     def __init__(self):
         self.yolo_input_size = (32, 32)
         self.yolo_num_classes = 10
@@ -10,6 +10,8 @@ class Params:
         self.num_epochs = 50  # Increased from 50
         self.top_k = 2
         self.knn_neighbors = 3
+        self.early_stopping_patience = 10
+        self.dropout_rate = 0.3
 
     def enquireMetaValue(self, key):
         if hasattr(self, key):
