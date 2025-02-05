@@ -3,14 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from yolo_module import YOLO
 from gnn_module import GNN
-from torch_geometric.nn import knn_graph
+from torch_geometric.nn import knn_graph, GCNConv
 
 class YOLO_GNN(nn.Module):
     def __init__(self, input_size, num_classes, feature_dim, gnn_hidden_dim, gnn_output_dim, top_k, knn_neighbors):
         super(YOLO_GNN, self).__init__()
         self.yolo = YOLO(input_size, num_classes, feature_dim)
         self.gnns = nn.ModuleList([GNN(feature_dim, gnn_hidden_dim, gnn_output_dim) for _ in range(num_classes)])
-        self.fc = nn.Linear(gnn_output_dim, num_classes)
+        self.final_gnn = GCNConv(gnn_output_dim, num_classes)  # GNN replaces FC
         self.top_k = top_k
         self.knn_neighbors = knn_neighbors
         self.feature_dim = feature_dim
@@ -64,7 +64,8 @@ class YOLO_GNN(nn.Module):
         
         combined_output = combined_output.view(-1, combined_output.size(-1))
         
-        final_output = self.fc(combined_output)
+        # Apply final GNN classifier instead of FC layer
+        final_output = self.final_gnn(combined_output, edge_index)
         final_output = final_output.view(x.size(0), self.top_k, -1)
         final_output = final_output.mean(dim=1)
         
