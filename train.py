@@ -59,7 +59,7 @@ class Train:
             
             if test_acc > best_accuracy:
                 best_accuracy = test_acc
-                torch.save(self.trainer.model.state_dict(), 'best_model.pth')
+                torch.save(self.trainer.model.state_dict(), 'best_vig_gnn_model.pth')
                 self.early_stop_counter = 0  # Reset counter if there's improvement
             
             if self.overfit_detector.check(train_loss, test_loss, train_acc, test_acc)["is_overfit"]:
