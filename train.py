@@ -28,7 +28,8 @@ class Train:
             final_div_factor=1e4
         )
         
-        self.trainer = Trainer(model, criterion, optimizer, scheduler, self.device)
+        self.trainer = Trainer(model, criterion, optimizer, scheduler, self.device,
+                               aux_loss_weight=metas.aux_loss_weight)
         self.early_stop_patience = metas.early_stopping_patience # Number of epochs to wait before early stopping
         self.early_stop_counter = 0  # Tracks how many consecutive overfit detections occur
         

@@ -14,8 +14,10 @@ if __name__ == "__main__":
         feature_dim=metas.feature_dim,
         gnn_hidden_dim=metas.gnn_hidden_dim,
         gnn_output_dim=metas.gnn_output_dim,
+        gnn_num_heads=metas.gnn_num_heads,
+        pool_ratio=metas.pool_ratio,
+        dropout_rate=metas.dropout_rate,
         top_k=metas.top_k,
-        knn_neighbors=metas.knn_neighbors
     )
     data_loader = CIFAR10DataLoader(batch_size=metas.batch_size)
     train_loader, test_loader = data_loader.get_loaders()
