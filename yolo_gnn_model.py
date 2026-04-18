@@ -133,7 +133,12 @@ class YOLO_GNN(nn.Module):
             counts[mask]     += 1
 
         # Average across top-k contributions
-        combined     = gnn_output / counts.clamp(min=1).unsqueeze(1)  # [B, gnn_output_dim]
-        final_output = self.fc(combined)                               # [B, num_classes]
+        combined  = gnn_output / counts.clamp(min=1).unsqueeze(1)  # [B, gnn_output_dim]
+        gnn_logits = self.fc(combined)                             # [B, num_classes]
 
-        return final_output, object_logits
+        # Backbone is the primary classifier; GNN adds relational refinement.
+        # Residual sum lets backbone reach its natural accuracy ceiling while
+        # GNN contributes incremental gains from part-relationship reasoning.
+        final_output = object_logits + gnn_logits                 # [B, num_classes]
+
+        return final_output, gnn_logits
